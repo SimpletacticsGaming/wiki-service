@@ -1,0 +1,32 @@
+services:
+  wiki-db:
+    image: postgres:15.3-alpine
+    restart: always
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: db200
+      POSTGRES_DB: wiki
+    ports:
+      - "5433:5432"
+    volumes:
+      # Runs once on an empty data directory and creates the wiki schema.
+      - ./init/setup_db:/docker-entrypoint-initdb.d:ro
+      - wiki-db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d wiki"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  sita-bot:
+    image: registry.simpletactics.de/sita-bot-local:latest
+    env_file:
+      # Copy sita-bot-secrets.txt.example first; the real file is gitignored.
+      # Optional so `docker compose up wiki-db` works without it.
+      - path: ./sita-bot-secrets.txt
+        required: false
+    ports:
+      - "8443:8443"
+
+volumes:
+  wiki-db-data:
