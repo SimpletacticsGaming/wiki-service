@@ -118,10 +118,13 @@ publishing {
     repositories {
         maven {
             name = "nexus"
-            url = if (version.toString().contains("SNAPSHOT", true)) {
-                uri(nexusSnapshotUrl)
-            } else {
-                uri(nexusUrl)
+            // Chosen explicitly rather than sniffed from the version string. A dev
+            // build is versioned 1.4.0-g1a2b3c4, which contains no "SNAPSHOT" and
+            // would otherwise land immutably in the releases repository.
+            url = when (val repo = (findProperty("nexusRepo") as String?) ?: "snapshots") {
+                "releases" -> uri(nexusUrl)
+                "snapshots" -> uri(nexusSnapshotUrl)
+                else -> error("nexusRepo must be 'releases' or 'snapshots', got '$repo'.")
             }
             credentials {
                 username = nexusUser

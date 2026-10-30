@@ -1,171 +1,38 @@
 name: pipeline
 
+# Every push builds and publishes a dev image tagged <next-version>-g<sha>. Nothing
+# here tags or releases: release candidates come from cut-rc.yml, and final releases
+# are promotions of a candidate (promote.yml), never a rebuild.
 on:
   push:
-  workflow_dispatch:
-    inputs:
-      version:
-        description: 'The version which is used for the build (e.g. 1.0.0)'
-        required: true
-        type: string
 
 jobs:
   version:
     outputs:
-      tag: ${{ steps.tag_generation.outputs.tag }}
+      version: ${{ steps.version.outputs.version }}
+      base_version: ${{ steps.version.outputs.base_version }}
+      has_release: ${{ steps.version.outputs.has_release }}
     runs-on: ubuntu-latest
     steps:
-      - name: Generate tag
-        id: tag_generation
-        run: |
-          PIPELINE_NUMBER=${{ github.run_number }}
-          EVENT_NAME="${{ github.event_name }}"
-          REF_NAME="${{ github.ref_name }}"
-          if [[ "$EVENT_NAME" == "workflow_dispatch" && ( "$REF_NAME" == "main" || "$REF_NAME" == hotfix* || "$REF_NAME" == release* ) ]]; then
-            NEW_TAG="${VERSION}"
-          else
-            NEW_TAG="$(date +'%Y-%m-%d').${PIPELINE_NUMBER}"
-          fi
-          echo "tag=$NEW_TAG" >> $GITHUB_OUTPUT
-        env:
-          VERSION: ${{ inputs.version }}
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          # Required: the version is derived from commit history back to the last tag.
+          fetch-depth: 0
+      - name: Generate version
+        id: version
+        uses: SimpletacticsGaming/version-action@v1.0.0
 
   build:
     needs: version
-    runs-on: ubuntu-latest
-    steps:
-      - name: Check out repository
-        uses: actions/checkout@v4
-      - name: Set up JDK 21
-        uses: actions/setup-java@v4
-        with:
-          java-version: '21'
-          distribution: 'temurin'
-      - name: Set up Gradle
-        uses: gradle/actions/setup-gradle@v4
-      - name: Determine tag
-        run: echo "TAG_NAME=${{ needs.version.outputs.tag }}" >> $GITHUB_ENV
-      - name: Build
-        run: >-
-          ./gradlew clean build -x test
-          -PprojVersion=${TAG_NAME}
-          -PnexusSnapshotUrl=${{ secrets.NEXUS_SNAPSHOT_URL }}
-          -PnexusUrl=${{ secrets.NEXUS_URL }}
-          -PnexusUser=${{ secrets.NEXUS_USER }}
-          -PnexusPassword=${{ secrets.NEXUS_PASSWORD }}
-      - name: Upload jar
-        uses: actions/upload-artifact@v4
-        with:
-          name: wiki-service-jar
-          path: build/libs/wiki-service.jar
-          retention-days: 7
-
-  # Runs before anything is published: a broken build must never reach the registry.
-  test:
-    needs: build
-    runs-on: ubuntu-latest
-    steps:
-      - name: Check out repository
-        uses: actions/checkout@v4
-      - name: Set up JDK 21
-        uses: actions/setup-java@v4
-        with:
-          java-version: '21'
-          distribution: 'temurin'
-      - name: Set up Gradle
-        uses: gradle/actions/setup-gradle@v4
-      - name: Run tests
-        run: >-
-          ./gradlew test
-          -PnexusSnapshotUrl=${{ secrets.NEXUS_SNAPSHOT_URL }}
-          -PnexusUrl=${{ secrets.NEXUS_URL }}
-          -PnexusUser=${{ secrets.NEXUS_USER }}
-          -PnexusPassword=${{ secrets.NEXUS_PASSWORD }}
-      - name: Upload test report
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: test-report
-          path: build/reports/tests
-          retention-days: 7
+    uses: ./.github/workflows/build.yml
+    secrets: inherit
+    with:
+      version: ${{ needs.version.outputs.version }}
 
   publish:
-    needs:
-      - version
-      - build
-      - test
-    runs-on: ubuntu-latest
-    steps:
-      - name: Check out repository
-        uses: actions/checkout@v4
-      - name: Determine tag
-        run: echo "TAG_NAME=${{ needs.version.outputs.tag }}" >> $GITHUB_ENV
-      - name: Download jar
-        uses: actions/download-artifact@v4
-        with:
-          name: wiki-service-jar
-          path: build/libs
-      - name: Build docker image
-        run: docker build -f Dockerfile -t ${{ secrets.DOCKER_REPOSITORY }}/wiki-service:${TAG_NAME} .
-      - name: Docker Registry Login
-        # --password-stdin keeps the token out of the runner's process list.
-        run: echo "${{ secrets.DOCKER_REGISTRY_PW }}" | docker login -u "${{ secrets.DOCKER_REGISTRY_USER }}" --password-stdin "${{ secrets.DOCKER_REPOSITORY }}"
-      - name: Push docker image to registry
-        run: docker image push ${{ secrets.DOCKER_REPOSITORY }}/wiki-service:${TAG_NAME}
-      - name: Docker Registry Logout
-        if: always()
-        run: docker logout ${{ secrets.DOCKER_REPOSITORY }}
-
-  # The OpenAPI contract, published for sita-backend to generate its client from.
-  # Same gate as the image: it only goes out once tests are green, so a consumer
-  # can never generate against a spec this service failed to build.
-  publish_spec:
-    needs:
-      - version
-      - build
-      - test
-    runs-on: ubuntu-latest
-    steps:
-      - name: Check out repository
-        uses: actions/checkout@v4
-      - name: Set up JDK 21
-        uses: actions/setup-java@v4
-        with:
-          java-version: '21'
-          distribution: 'temurin'
-      - name: Set up Gradle
-        uses: gradle/actions/setup-gradle@v4
-      - name: Determine tag
-        run: echo "TAG_NAME=${{ needs.version.outputs.tag }}" >> $GITHUB_ENV
-      - name: Publish wiki-api-spec to Nexus
-        run: >
-          ./gradlew publishSpecPublicationToNexusRepository
-          -PprojVersion=${TAG_NAME}
-          -PnexusSnapshotUrl=${{ secrets.NEXUS_SNAPSHOT_URL }}
-          -PnexusUrl=${{ secrets.NEXUS_URL }}
-          -PnexusUser=${{ secrets.NEXUS_USER }}
-          -PnexusPassword=${{ secrets.NEXUS_PASSWORD }}
-
-  create_release:
-    if: ${{ github.event_name == 'workflow_dispatch' && (github.ref_name == 'main' || startsWith(github.ref_name, 'hotfix') || startsWith(github.ref_name, 'release')) }}
-    needs:
-      - version
-      - publish
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
-    steps:
-      - name: Check out repository
-        uses: actions/checkout@v4
-        with:
-          token: ${{ secrets.ACTION_REPO_SECRET }}
-      - name: Determine release tag
-        run: echo "RELEASE_TAG=v${{ needs.version.outputs.tag }}" >> $GITHUB_ENV
-      - name: Push new tag
-        run: |
-          git tag "${RELEASE_TAG}"
-          git push origin "${RELEASE_TAG}"
-      - name: Create GitHub Release
-        run: gh release create ${RELEASE_TAG} --generate-notes
-        env:
-          GH_TOKEN: ${{ secrets.ACTION_REPO_SECRET }}
+    needs: [version, build]
+    uses: ./.github/workflows/publish-image.yml
+    secrets: inherit
+    with:
+      version: ${{ needs.version.outputs.version }}
