@@ -111,12 +111,19 @@ A topic with no parent is treated as the root and cannot be deleted (`409`).
 | `PUT` | `/polls/{id}?userId=` | `{ question, description, options[], endDate? }`; open polls only |
 | `POST` | `/polls/{id}/votes?userId=` | `{ votes: [{ optionUuid, option }] }`; open polls only |
 | `POST` | `/polls/{id}/closure` | Close. `204` |
-| `DELETE` | `/polls/{id}/closure` | Reopen, optional `{ endDate }`. `204` |
+| `GET` | `/polls/{id}/votes` | Raw votes incl. voter ids. Restricted - see below |
+| `DELETE` | `/polls/{id}/closure` | Reopen, optional `?endDate=`. `204` |
 | `DELETE` | `/polls/{id}` | → `{ id, parentId }` |
 
-`userId` is the end user sita-backend is acting for. The response reports
-aggregate `yesVotes`/`noVotes` per option plus that user's own `ownVote` —
-individual voters' identities are never returned.
+`userId` is the end user sita-backend is acting for. `GET /polls/{id}` reports
+aggregate `yesVotes`/`noVotes` per option plus that user's own `ownVote`, and
+never anyone else's identity.
+
+Who voted what is available only from `GET /polls/{id}/votes`, kept separate so
+it cannot leak through the ordinary read path. It returns user *ids*; resolving
+them to names is the caller's job, since this service stores nothing else about
+users. It is unauthenticated as far as end users go — **the caller must check
+the end user may see it**. sita-backend gates it behind `WIKI_EVALUATE`.
 
 A poll is open while `ended` is false **and** its `endDate` has not passed. A
 nightly job (`sita.wiki.poll.auto-close.cron`) flags expired polls; votes are
@@ -129,7 +136,24 @@ a poll whose deadline has passed requires a new `endDate`.
 |---|---|---|
 | `GET` | `/nodes/{id}/type` | → `{ id, type }` |
 | `GET` | `/nodes/{id}/author` | → `{ id, author }` |
+| `GET` | `/nodes/{id}/descendants` | The node and everything under it, flattened |
 | `GET` | `/nodes/{id}/sidebar` | Navigation buttons for the panel beside this node |
+
+`/nodes/{id}/descendants` exists so an authorization check costs one request
+instead of one per node: sita-backend grants access to a topic when any node
+beneath it is permitted, and evaluates that on every wiki request.
+
+### The contract
+
+[`src/main/resources/openapi/wiki-api.yaml`](src/main/resources/openapi/wiki-api.yaml)
+is the source of truth, not a description written after the fact. The models and
+the controller interfaces in this service are generated from it
+(`./gradlew openApiGenerate`), and sita-backend generates its client from the
+same file, published to Nexus as `de.simpletactics:wiki-api-spec` by the
+pipeline. Neither side hand-writes these types, so they cannot drift.
+
+Changing a schema changes both services. Adding an optional field is safe;
+removing or narrowing one needs both released together.
 
 ### Timestamps
 
