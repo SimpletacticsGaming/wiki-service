@@ -28,7 +28,7 @@ private fun pollWith(vararg entries: PollEntryEntity) = PollEntity(
     updatedAt = FIXED_TIME,
 )
 
-class PollMappersTest : FunSpec({
+class PollMapperTest : FunSpec({
 
     test("response carries vote counts but never other users identities") {
         val poll = pollWith(

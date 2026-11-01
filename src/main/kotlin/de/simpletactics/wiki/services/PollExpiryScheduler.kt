@@ -16,13 +16,17 @@ import org.springframework.stereotype.Component
     prefix = "sita.wiki.poll.auto-close",
     name = ["enabled"],
     havingValue = "true",
-    matchIfMissing = true,
 )
 class PollExpiryScheduler(
     private val pollPort: PollPort,
 ) {
 
-    @Scheduled(cron = "\${sita.wiki.poll.auto-close.cron:0 5 0 * * *}")
+    /**
+     * No inline default for the cron: both `enabled` and `cron` live in
+     * `application.properties`, so a missing or misspelled property should make
+     * the context fail rather than silently install a schedule nobody chose.
+     */
+    @Scheduled(cron = "\${sita.wiki.poll.auto-close.cron}")
     fun closeExpiredPolls() {
         val closed = pollPort.closeExpiredOpenPolls()
         if (closed > 0) log.info("Closed $closed expired poll(s)")

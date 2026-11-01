@@ -36,15 +36,27 @@ class AlertService(
             LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"))
         }\n$errorMessage"
 
-        val profiles = environment.activeProfiles
-        return when {
-            profiles.contains("local") -> "LOCAL:\n$alertMessage"
-            profiles.contains("dev") -> "DEV:\n$alertMessage"
-            else -> "PROD:\n$alertMessage"
-        }
+        return "${environmentLabel()}:\n$alertMessage"
+    }
+
+    /**
+     * The label names the profile the service actually runs under. It used to
+     * fall back to PROD, which meant any run without a profile - a local start
+     * that forgot `-Dspring.profiles.active=local` above all - announced itself
+     * as production. An unlabelled environment is [UNKNOWN_ENVIRONMENT] instead:
+     * for PROD to appear, the deployment has to say so.
+     */
+    private fun environmentLabel(): String {
+        val activeProfiles = environment.activeProfiles
+        return ENVIRONMENT_PROFILES.firstOrNull { it in activeProfiles }?.uppercase()
+            ?: UNKNOWN_ENVIRONMENT
     }
 
     companion object {
         private val log = LoggerFactory.getLogger(AlertService::class.java)
+
+        /** In precedence order, so `local,secrets` reads as LOCAL rather than both. */
+        private val ENVIRONMENT_PROFILES = listOf("local", "testing", "dev", "prod")
+        private const val UNKNOWN_ENVIRONMENT = "UNKNOWN"
     }
 }

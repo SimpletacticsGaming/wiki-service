@@ -68,12 +68,12 @@ class PollMapper : RowMapper<PollEntity> {
             getInt("id"),
             getString("question"),
             parsePollEntries(getString("data")),
-            getString("description") ?: "",
-            getBoolean("ended"),
-            getObject("end_date", LocalDate::class.java),
             getString("author"),
             offsetDateTime("created_at"),
             offsetDateTime("updated_at"),
+            getString("description") ?: "",
+            getBoolean("ended"),
+            getObject("end_date", LocalDate::class.java),
         )
     }
 

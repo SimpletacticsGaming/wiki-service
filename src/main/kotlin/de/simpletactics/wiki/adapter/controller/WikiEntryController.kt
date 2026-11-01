@@ -1,5 +1,6 @@
 package de.simpletactics.wiki.adapter.controller
 
+import de.simpletactics.wiki.adapter.dto.toResponse
 import de.simpletactics.wiki.api.WikiEntriesApi
 import de.simpletactics.wiki.api.dto.DeletedResponse
 import de.simpletactics.wiki.api.dto.EntryResponse
@@ -22,16 +23,7 @@ class WikiEntryController(
         val entry = wikiPort.getEntry(id)
             ?: throw WikiNotFoundException("No entry found with id $id")
 
-        return ResponseEntity.ok(
-            EntryResponse(
-                entry.id,
-                entry.headline,
-                entry.htmlEntry,
-                entry.author,
-                entry.createdAt,
-                entry.updatedAt,
-            )
-        )
+        return ResponseEntity.ok(entry.toResponse())
     }
 
     override fun updateEntry(

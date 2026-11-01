@@ -3,6 +3,7 @@ package de.simpletactics.wiki.adapter.controller
 import de.simpletactics.wiki.adapter.dto.EntryInsertEntity
 import de.simpletactics.wiki.adapter.dto.TopicInsertEntity
 import de.simpletactics.wiki.adapter.dto.poll.toInsertEntity
+import de.simpletactics.wiki.adapter.dto.toResponse
 import de.simpletactics.wiki.api.WikiTopicsApi
 import de.simpletactics.wiki.api.dto.CreateEntryRequest
 import de.simpletactics.wiki.api.dto.CreatePollRequest
@@ -39,9 +40,7 @@ class WikiTopicController(
         val topic = wikiPort.getTopic(id)
             ?: throw WikiNotFoundException("No topic found with id $id")
 
-        return ResponseEntity.ok(
-            TopicResponse(topic.id, topic.topic, topic.author, topic.createdAt, topic.updatedAt)
-        )
+        return ResponseEntity.ok(topic.toResponse())
     }
 
     override fun createChildTopic(

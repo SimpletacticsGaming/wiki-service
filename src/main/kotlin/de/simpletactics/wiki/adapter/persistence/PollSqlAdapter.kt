@@ -111,15 +111,19 @@ class PollSqlAdapter(
     }
 
     /**
-     * Reopens a closed poll. A null [endDate] leaves the stored deadline alone;
-     * clearing it would silently turn a dated poll into an open-ended one.
+     * Reopens a closed poll. A null [endDate] leaves the stored deadline alone -
+     * `COALESCE` keeps that in one statement. Clearing it instead would silently
+     * turn a dated poll into an open-ended one, and reopening with a deadline
+     * that has already passed is refused one layer up in
+     * [de.simpletactics.wiki.adapter.controller.PollController.reopenPoll],
+     * because [isPollOpen] would treat such a poll as closed again right away.
      */
     fun reopenPoll(id: Int, endDate: LocalDate?) {
-        val affected = if (endDate == null) {
-            jdbc.update("UPDATE wiki_poll SET ended = false WHERE id = ?", id)
-        } else {
-            jdbc.update("UPDATE wiki_poll SET ended = false, end_date = ? WHERE id = ?", endDate, id)
-        }
+        val affected = jdbc.update(
+            "UPDATE wiki_poll SET ended = false, end_date = COALESCE(CAST(? AS date), end_date) WHERE id = ?",
+            endDate,
+            id,
+        )
         if (affected != 1) throw WikiNotFoundException("No poll found to reopen with id $id")
     }
 

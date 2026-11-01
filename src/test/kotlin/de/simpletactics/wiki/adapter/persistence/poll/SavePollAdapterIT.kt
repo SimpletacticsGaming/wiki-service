@@ -75,7 +75,7 @@ class SavePollAdapterIT(
         test("saved poll is registered as a child of its topic") {
             val generatedId = pollPort.savePoll(
                 24,
-                PollInsertEntity("Child check", emptyList(), "", null, "testAuthor"),
+                PollInsertEntity("Child check", emptyList(), "testAuthor"),
             )
 
             jdbcTemplate.queryForObject(

@@ -12,20 +12,20 @@ data class PollEntity(
     val id: Int,
     val question: String,
     val pollEntries: List<PollEntryEntity>,
-    val description: String = "",
-    val ended: Boolean = false,
-    val endDate: LocalDate? = null,
     val author: String,
     val createdAt: OffsetDateTime,
     val updatedAt: OffsetDateTime,
+    val description: String = "",
+    val ended: Boolean = false,
+    val endDate: LocalDate? = null,
 )
 
 data class PollInsertEntity(
     val question: String,
     val pollEntries: List<PollEntryEntity>,
+    val author: String,
     val description: String = "",
     val endDate: LocalDate? = null,
-    val author: String,
 )
 
 /** The fields [PollSqlAdapter.updatePoll] is allowed to change. */
