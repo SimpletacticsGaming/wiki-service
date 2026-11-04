@@ -1,0 +1,731 @@
+openapi: 3.0.3
+
+# The contract between wiki-service and sita-backend, and the single source of
+# truth for both. wiki-service generates its request/response models and API
+# interfaces from this file; sita-backend generates its client from the copy
+# published to Nexus as de.simpletactics:wiki-api-spec. Neither side hand-writes
+# these types, so they cannot drift apart.
+#
+# Changing a schema here changes both services. Treat it as a published
+# interface: add optional fields freely, but removing or narrowing one is a
+# breaking change that needs both sides released together.
+
+info:
+  title: wiki-service API
+  description: >-
+    Internal HTTP API for the SITA wiki: a tree of topics, entries and polls.
+    Consumed by sita-backend, which owns user identity and all authorization -
+    this service authenticates the calling service, not the end user.
+  version: 1.0.0
+
+servers:
+  - url: http://localhost:8080
+    description: Local development
+
+security:
+  - serviceToken: []
+
+tags:
+  - name: Wiki topics
+  - name: Wiki entries
+  - name: Wiki polls
+  - name: Wiki nodes
+
+paths:
+
+  # ------------------------------------------------------------------ topics
+
+  /api/wiki/topics/{id}:
+    get:
+      tags: [Wiki topics]
+      operationId: getTopic
+      summary: One topic
+      parameters:
+        - $ref: '#/components/parameters/WikiId'
+      responses:
+        '200':
+          description: The topic
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TopicResponse'
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    put:
+      tags: [Wiki topics]
+      operationId: updateTopic
+      summary: Rename a topic
+      parameters:
+        - $ref: '#/components/parameters/WikiId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateTopicRequest'
+      responses:
+        '200':
+          description: The updated topic
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TopicResponse'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    delete:
+      tags: [Wiki topics]
+      operationId: deleteTopic
+      summary: Delete a topic and everything beneath it
+      description: >-
+        Cascades to child topics, entries and polls. The root topic has no
+        parent and cannot be deleted.
+      parameters:
+        - $ref: '#/components/parameters/WikiId'
+      responses:
+        '200':
+          description: Deleted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeletedResponse'
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+
+  /api/wiki/topics/{parentId}/topics:
+    post:
+      tags: [Wiki topics]
+      operationId: createChildTopic
+      summary: Create a topic under another topic
+      parameters:
+        - name: parentId
+          in: path
+          required: true
+          schema: { type: integer, format: int32 }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateTopicRequest'
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CreatedResponse'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /api/wiki/topics/{id}/entries:
+    post:
+      tags: [Wiki topics]
+      operationId: createEntry
+      summary: Create an entry under a topic
+      parameters:
+        - $ref: '#/components/parameters/WikiId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateEntryRequest'
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CreatedResponse'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /api/wiki/topics/{id}/polls:
+    post:
+      tags: [Wiki topics]
+      operationId: createPoll
+      summary: Create a poll under a topic
+      parameters:
+        - $ref: '#/components/parameters/WikiId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreatePollRequest'
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CreatedResponse'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /api/wiki/topics/{id}/buttons:
+    get:
+      tags: [Wiki topics]
+      operationId: getButtons
+      summary: Children of this topic, for the main panel
+      parameters:
+        - $ref: '#/components/parameters/WikiId'
+      responses:
+        '200':
+          description: Buttons
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/WikiButtonResponse'
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  # ----------------------------------------------------------------- entries
+
+  /api/wiki/entries/{id}:
+    get:
+      tags: [Wiki entries]
+      operationId: getEntry
+      summary: One entry
+      parameters:
+        - $ref: '#/components/parameters/WikiId'
+      responses:
+        '200':
+          description: The entry
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EntryResponse'
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    put:
+      tags: [Wiki entries]
+      operationId: updateEntry
+      summary: Update an entry
+      parameters:
+        - $ref: '#/components/parameters/WikiId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateEntryRequest'
+      responses:
+        '200':
+          description: The updated entry
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EntryResponse'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    delete:
+      tags: [Wiki entries]
+      operationId: deleteEntry
+      summary: Delete an entry
+      parameters:
+        - $ref: '#/components/parameters/WikiId'
+      responses:
+        '200':
+          description: Deleted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeletedResponse'
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  # ------------------------------------------------------------------- polls
+
+  /api/wiki/polls/{id}:
+    get:
+      tags: [Wiki polls]
+      operationId: getPoll
+      summary: One poll, with that user's own vote
+      description: Works for open and closed polls alike.
+      parameters:
+        - $ref: '#/components/parameters/WikiId'
+        - $ref: '#/components/parameters/UserId'
+      responses:
+        '200':
+          description: The poll
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PollResponse'
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    put:
+      tags: [Wiki polls]
+      operationId: updatePoll
+      summary: Update an open poll
+      parameters:
+        - $ref: '#/components/parameters/WikiId'
+        - $ref: '#/components/parameters/UserId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdatePollRequest'
+      responses:
+        '200':
+          description: The updated poll
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PollResponse'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+    delete:
+      tags: [Wiki polls]
+      operationId: deletePoll
+      summary: Delete a poll
+      parameters:
+        - $ref: '#/components/parameters/WikiId'
+      responses:
+        '200':
+          description: Deleted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeletedResponse'
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /api/wiki/polls/{id}/votes:
+    get:
+      tags: [Wiki polls]
+      operationId: getPollVotes
+      summary: Every vote on the poll, voter ids included
+      description: >-
+        Restricted: unlike getPoll, which only aggregates, this reveals how each
+        user voted. The caller must check that the end user may see it -
+        sita-backend requires the WIKI_EVALUATE permission. User ids are
+        returned raw; resolving them to names is the caller's job, since this
+        service stores nothing else about users.
+      parameters:
+        - $ref: '#/components/parameters/WikiId'
+      responses:
+        '200':
+          description: Votes per option, oldest first
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/PollOptionVotesResponse'
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    post:
+      tags: [Wiki polls]
+      operationId: submitVotes
+      summary: Cast or change votes on an open poll
+      parameters:
+        - $ref: '#/components/parameters/WikiId'
+        - $ref: '#/components/parameters/UserId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SubmitVotesRequest'
+      responses:
+        '200':
+          description: The poll after voting
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PollResponse'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+
+  /api/wiki/polls/{id}/closure:
+    post:
+      tags: [Wiki polls]
+      operationId: closePoll
+      summary: Close a poll
+      parameters:
+        - $ref: '#/components/parameters/WikiId'
+      responses:
+        '204':
+          description: Closed
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    delete:
+      tags: [Wiki polls]
+      operationId: reopenPoll
+      summary: Reopen a closed poll
+      description: >-
+        Without a new endDate the stored deadline is kept, so a poll that closed
+        because its deadline passed can only be reopened by supplying one.
+        The date is a query parameter rather than a body: a body on DELETE would
+        make Content-Type mandatory even for the common no-change case.
+      parameters:
+        - $ref: '#/components/parameters/WikiId'
+        - name: endDate
+          in: query
+          required: false
+          description: >-
+            New deadline. Omit to keep the stored one - which means a poll that
+            closed because its deadline passed can only be reopened by supplying
+            a new date.
+          schema: { type: string, format: date }
+      responses:
+        '204':
+          description: Reopened
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+
+  # ------------------------------------------------------------------- nodes
+
+  /api/wiki/nodes/{id}/type:
+    get:
+      tags: [Wiki nodes]
+      operationId: getWikiType
+      summary: What kind of node this id is
+      parameters:
+        - $ref: '#/components/parameters/WikiId'
+      responses:
+        '200':
+          description: The node type
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WikiNodeTypeResponse'
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /api/wiki/nodes/{id}/author:
+    get:
+      tags: [Wiki nodes]
+      operationId: getWikiAuthor
+      summary: Who created this node
+      parameters:
+        - $ref: '#/components/parameters/WikiId'
+      responses:
+        '200':
+          description: The author
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WikiAuthorResponse'
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /api/wiki/nodes/{id}/descendants:
+    get:
+      tags: [Wiki nodes]
+      operationId: getDescendants
+      summary: This node and every node beneath it
+      description: >-
+        One call instead of a walk. sita-backend grants access to a topic when
+        any node under it is permitted, and evaluates that on every wiki
+        request, so the subtree has to arrive in a single response. The node
+        itself is included; an unknown id is a 404 rather than an empty list.
+      parameters:
+        - $ref: '#/components/parameters/WikiId'
+      responses:
+        '200':
+          description: The subtree, flattened
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/WikiNodeTypeResponse'
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /api/wiki/nodes/{id}/sidebar:
+    get:
+      tags: [Wiki nodes]
+      operationId: getSidebar
+      summary: Navigation buttons for the panel beside this node
+      description: >-
+        The containing topic followed by its relevant children. The id may be
+        any wiki node, not necessarily a topic.
+      parameters:
+        - $ref: '#/components/parameters/WikiId'
+      responses:
+        '200':
+          description: Buttons
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/WikiButtonResponse'
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+components:
+
+  securitySchemes:
+    serviceToken:
+      type: apiKey
+      in: header
+      name: authentication
+      description: >-
+        Shared secret identifying the calling service. Not an end-user
+        credential - sita-backend authenticates the user and passes only the
+        decisions and ids this service needs.
+
+  parameters:
+    WikiId:
+      name: id
+      in: path
+      required: true
+      schema: { type: integer, format: int32 }
+    UserId:
+      name: userId
+      in: query
+      required: true
+      description: >-
+        The end user sita-backend is acting for, so the response can carry that
+        user's own vote. A plain parameter because sita-backend owns identity;
+        this service only stores the id.
+      schema: { type: integer, format: int32 }
+
+  responses:
+    BadRequest:
+      description: Invalid request
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/ProblemDetail' }
+    Unauthorized:
+      description: Missing or wrong service token
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/ProblemDetail' }
+    NotFound:
+      description: No such wiki resource
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/ProblemDetail' }
+    Conflict:
+      description: Conflicts with the current state
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/ProblemDetail' }
+
+  schemas:
+
+    WikiType:
+      type: string
+      enum: [TOPIC, ENTRY, POLL]
+
+    PollVoteEnum:
+      type: string
+      enum: ['TRUE', 'FALSE']
+
+    ProblemDetail:
+      type: object
+      description: RFC 7807 error body.
+      properties:
+        type: { type: string, format: uri }
+        title: { type: string }
+        status: { type: integer, format: int32 }
+        detail: { type: string }
+        instance: { type: string, format: uri }
+
+    # ------------------------------------------------------------- responses
+
+    WikiButtonResponse:
+      type: object
+      required: [id, title, type]
+      properties:
+        id: { type: integer, format: int32 }
+        title: { type: string }
+        type: { $ref: '#/components/schemas/WikiType' }
+
+    TopicResponse:
+      type: object
+      required: [id, topic, author, createdAt, updatedAt]
+      properties:
+        id: { type: integer, format: int32 }
+        topic: { type: string }
+        author: { type: string }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+
+    EntryResponse:
+      type: object
+      required: [id, headline, content, author, createdAt, updatedAt]
+      properties:
+        id: { type: integer, format: int32 }
+        headline: { type: string }
+        content: { type: string }
+        author: { type: string }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+
+    WikiNodeTypeResponse:
+      type: object
+      required: [id, type]
+      properties:
+        id: { type: integer, format: int32 }
+        type: { $ref: '#/components/schemas/WikiType' }
+
+    WikiAuthorResponse:
+      type: object
+      required: [id, author]
+      properties:
+        id: { type: integer, format: int32 }
+        author: { type: string }
+
+    CreatedResponse:
+      type: object
+      required: [id]
+      properties:
+        id: { type: integer, format: int32 }
+
+    DeletedResponse:
+      type: object
+      required: [id]
+      properties:
+        id: { type: integer, format: int32 }
+        parentId:
+          type: integer
+          format: int32
+          nullable: true
+          description: Where to navigate after the delete. Null for a node with no parent.
+
+    PollOptionResponse:
+      type: object
+      required: [uuid, text, yesVotes, noVotes, ownVote]
+      properties:
+        uuid: { type: string }
+        text: { type: string }
+        yesVotes: { type: integer, format: int32 }
+        noVotes: { type: integer, format: int32 }
+        ownVote: { $ref: '#/components/schemas/PollVoteEnum' }
+
+    PollResponse:
+      type: object
+      required: [id, question, description, options, ended, author, createdAt, updatedAt]
+      properties:
+        id: { type: integer, format: int32 }
+        question: { type: string }
+        description: { type: string }
+        options:
+          type: array
+          items: { $ref: '#/components/schemas/PollOptionResponse' }
+        endDate: { type: string, format: date, nullable: true }
+        ended: { type: boolean }
+        author: { type: string }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+
+    PollOptionVotesResponse:
+      type: object
+      required: [optionUuid, text, votes]
+      properties:
+        optionUuid: { type: string }
+        text: { type: string }
+        votes:
+          type: array
+          items: { $ref: '#/components/schemas/PollVoteResponse' }
+
+    PollVoteResponse:
+      type: object
+      required: [userId, option, votedAt]
+      properties:
+        userId: { type: integer, format: int32 }
+        option: { $ref: '#/components/schemas/PollVoteEnum' }
+        votedAt: { type: string, format: date-time }
+
+    # -------------------------------------------------------------- requests
+
+    CreateTopicRequest:
+      type: object
+      required: [topic, author]
+      properties:
+        topic: { type: string, minLength: 1, maxLength: 500, pattern: '(?s).*\S.*' }
+        author: { type: string, minLength: 1, maxLength: 255, pattern: '(?s).*\S.*' }
+
+    UpdateTopicRequest:
+      type: object
+      required: [topic]
+      properties:
+        topic: { type: string, minLength: 1, maxLength: 500, pattern: '(?s).*\S.*' }
+
+    CreateEntryRequest:
+      type: object
+      required: [headline, author]
+      properties:
+        headline: { type: string, minLength: 1, maxLength: 500, pattern: '(?s).*\S.*' }
+        content: { type: string, default: '' }
+        author: { type: string, minLength: 1, maxLength: 255, pattern: '(?s).*\S.*' }
+
+    UpdateEntryRequest:
+      type: object
+      required: [headline]
+      properties:
+        headline: { type: string, minLength: 1, maxLength: 500, pattern: '(?s).*\S.*' }
+        content: { type: string, default: '' }
+
+    PollOptionRequest:
+      type: object
+      required: [text]
+      properties:
+        uuid:
+          type: string
+          nullable: true
+          description: Omitted when the option is new; the server then assigns one.
+        text: { type: string, minLength: 1, maxLength: 500, pattern: '(?s).*\S.*' }
+
+    CreatePollRequest:
+      type: object
+      required: [question, options, author]
+      properties:
+        question: { type: string, minLength: 1, maxLength: 500, pattern: '(?s).*\S.*' }
+        description: { type: string, maxLength: 4000, default: '' }
+        options:
+          type: array
+          minItems: 1
+          items: { $ref: '#/components/schemas/PollOptionRequest' }
+        endDate: { type: string, format: date, nullable: true }
+        author: { type: string, minLength: 1, maxLength: 255, pattern: '(?s).*\S.*' }
+
+    UpdatePollRequest:
+      type: object
+      required: [question, options]
+      properties:
+        question: { type: string, minLength: 1, maxLength: 500, pattern: '(?s).*\S.*' }
+        description: { type: string, maxLength: 4000, default: '' }
+        options:
+          type: array
+          minItems: 1
+          items: { $ref: '#/components/schemas/PollOptionRequest' }
+        endDate: { type: string, format: date, nullable: true }
+
+    VoteRequest:
+      type: object
+      required: [optionUuid, option]
+      properties:
+        optionUuid: { type: string, minLength: 1, pattern: '(?s).*\S.*' }
+        option: { $ref: '#/components/schemas/PollVoteEnum' }
+
+    SubmitVotesRequest:
+      type: object
+      required: [votes]
+      properties:
+        votes:
+          type: array
+          minItems: 1
+          items: { $ref: '#/components/schemas/VoteRequest' }
